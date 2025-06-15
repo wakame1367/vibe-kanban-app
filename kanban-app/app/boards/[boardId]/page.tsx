@@ -5,9 +5,9 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface BoardPageProps {
-  params: {
+  params: Promise<{
     boardId: string
-  }
+  }>
 }
 
 async function getBoard(boardId: string) {
@@ -34,7 +34,8 @@ async function getBoard(boardId: string) {
 }
 
 export default async function BoardPage({ params }: BoardPageProps) {
-  const board = await getBoard(params.boardId)
+  const { boardId } = await params
+  const board = await getBoard(boardId)
 
   if (!board) {
     notFound()
