@@ -4,6 +4,93 @@ import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { Priority } from '@prisma/client'
 
+export async function updateTaskPosition(
+  taskId: string,
+  newColumnId: string,
+  newPosition: number
+) {
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Get the task to move
+      const task = await tx.task.findUnique({
+        where: { id: taskId },
+        include: { column: { select: { id: true, boardId: true } } }
+      })
+
+      if (!task) {
+        throw new Error('タスクが見つかりません')
+      }
+
+      const oldColumnId = task.columnId
+      const boardId = task.column.boardId
+
+      // If moving to the same column
+      if (oldColumnId === newColumnId) {
+        // Update positions for tasks in the same column
+        if (newPosition > task.position) {
+          // Moving down - shift tasks between old and new positions up
+          await tx.task.updateMany({
+            where: {
+              columnId: oldColumnId,
+              position: {
+                gt: task.position,
+                lte: newPosition
+              }
+            },
+            data: { position: { decrement: 1 } }
+          })
+        } else if (newPosition < task.position) {
+          // Moving up - shift tasks between new and old positions down
+          await tx.task.updateMany({
+            where: {
+              columnId: oldColumnId,
+              position: {
+                gte: newPosition,
+                lt: task.position
+              }
+            },
+            data: { position: { increment: 1 } }
+          })
+        }
+      } else {
+        // Moving to different column
+        // Shift tasks in old column up
+        await tx.task.updateMany({
+          where: {
+            columnId: oldColumnId,
+            position: { gt: task.position }
+          },
+          data: { position: { decrement: 1 } }
+        })
+
+        // Shift tasks in new column down
+        await tx.task.updateMany({
+          where: {
+            columnId: newColumnId,
+            position: { gte: newPosition }
+          },
+          data: { position: { increment: 1 } }
+        })
+      }
+
+      // Update the task
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          columnId: newColumnId,
+          position: newPosition
+        }
+      })
+
+      // Revalidate the board page
+      revalidatePath(`/boards/${boardId}`)
+    })
+  } catch (error) {
+    console.error('Failed to update task position:', error)
+    throw new Error('タスクの移動に失敗しました')
+  }
+}
+
 export async function createTask(formData: FormData) {
   const title = formData.get('title') as string
   const description = formData.get('description') as string
