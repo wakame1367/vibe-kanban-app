@@ -12,8 +12,9 @@ export async function createBoard(formData: FormData) {
     throw new Error('Title is required')
   }
 
+  let board
   try {
-    const board = await prisma.board.create({
+    board = await prisma.board.create({
       data: {
         title: title.trim(),
         description: description?.trim() || null,
@@ -38,11 +39,11 @@ export async function createBoard(formData: FormData) {
         }
       }
     })
-
-    revalidatePath('/')
-    redirect(`/boards/${board.id}`)
   } catch (error) {
     console.error('Failed to create board:', error)
     throw new Error('Failed to create board')
   }
+
+  revalidatePath('/')
+  redirect(`/boards/${board.id}`)
 }
