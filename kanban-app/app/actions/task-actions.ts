@@ -24,9 +24,14 @@ export async function updateTaskPosition(
       const oldColumnId = task.columnId
       const boardId = task.column.boardId
 
-      // If moving to the same column
+      // Step 1: Set the moving task to a temporary negative position to avoid conflicts
+      await tx.task.update({
+        where: { id: taskId },
+        data: { position: -1 }
+      })
+
       if (oldColumnId === newColumnId) {
-        // Update positions for tasks in the same column
+        // Moving within the same column
         if (newPosition > task.position) {
           // Moving down - shift tasks between old and new positions up
           await tx.task.updateMany({
@@ -54,7 +59,7 @@ export async function updateTaskPosition(
         }
       } else {
         // Moving to different column
-        // Shift tasks in old column up
+        // Step 2a: Shift tasks in old column up (fill the gap)
         await tx.task.updateMany({
           where: {
             columnId: oldColumnId,
@@ -63,7 +68,7 @@ export async function updateTaskPosition(
           data: { position: { decrement: 1 } }
         })
 
-        // Shift tasks in new column down
+        // Step 2b: Shift tasks in new column down (make space)
         await tx.task.updateMany({
           where: {
             columnId: newColumnId,
@@ -73,7 +78,7 @@ export async function updateTaskPosition(
         })
       }
 
-      // Update the task
+      // Step 3: Update the task to its final position and column
       await tx.task.update({
         where: { id: taskId },
         data: {
